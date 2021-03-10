@@ -1,0 +1,179 @@
+---
+title: "General social survey"
+author: "Jacques Taschereau"
+date: "`r format(Sys.time(), '%d/%m/%y')`"
+output:
+  beamer_presentation: default
+  pdf_document: default
+  slidy_presentation: default
+  ioslides_presentation: default
+---
+
+```{r setup, include=FALSE, message=FALSE}
+#system("cmd.exe", input = paste('"C:\\Program Files\\R\\R-4.0.4\\bin\\Rscript.exe" C:\\Users\\Razer\\OneDrive\\Documents\\R\\startup.R'))
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(cache = TRUE)
+library(foreign)
+library(tidyverse)
+library(tinytex)
+library(data.table)
+```
+
+## The general social survey (GSS)
+
+- 6108 columns
+- A lot of factors, categorical data
+- Will start with the period 1972-2018
+
+- Most of all it contains tons of NA's, which is ok in R
+
+
+
+
+```{r}
+#1972 to 2018 gss data
+gss <- read.dta("C:/Users/Razer/OneDrive/Documents/R/GSS_stata/GSS7218_R1.dta")
+
+#can change the StringAsFactors value laters
+gss <- data.table(gss, key = "id")
+
+#save and load for memory efficiency
+save(gss, file = "gss.xdr", compress = FALSE)
+
+load(file = "gss.xdr")
+
+```
+
+
+## Social surveys
+
+- Other social surveys across the world are compiled
+
+    - Germany: German General Social Survey
+    - Canada: Canadian General Social Survey
+    - International Social Survey Programme based in Leipzig cumulates those between 58 countries
+        - ISSP offers "vintages" on different social topics whenever they cumulate
+        
+## GSS
+
+- The GSS changed methodology in 2006
+- Cross-sectional design to rotating panel design
+- Variables now organized into modules
+
+```{r}
+#sanity checks
+gss %>% 
+  filter(year == 2006) %>% 
+  select(year, contains("big5"))
+
+gss %>% 
+  filter(year >= 2006) %>% 
+  select(year, contains("WWWmin"))
+
+
+#check for key
+#id, year combos are unique
+key <- tibble(gss) %>% 
+  count(id, year) %>% 
+  filter(n>1)
+
+```
+
+
+```{r}
+# Mapping the modules to variable names
+# This will make the data easily subsettable
+# Used https://simplypdf.com/Excel to convert the Panel module identification table
+# See https://gss.norc.org/Documents/codebook/Panel%20Codebook.pdf to access the panel codebook
+
+modules <- readxl::read_xlsx("C:/Users/Razer/OneDrive/Documents/R/GSS_stata/Panel Codebook.xlsx")
+modules <- data.frame(modules)
+modules[,1] <- tolower(modules[,1])
+
+#only convert to tibble to pipe
+#we simplify by only keeping the first level module
+# modules_1 <- tibble(modules) %>% 
+#   select(-Module.II, -Module.III) %>% 
+#   group_by(Module.I) %>% 
+#   nest()
+
+#storing the gss columns
+gss_cols <- (colnames(gss))
+gss_cols <- t(t(gss_cols))
+gss_cols <- as.data.table(gss_cols)
+names(gss_cols)[1] <- "Varname"
+
+#keep all vars in colnames
+vars <- left_join(gss_cols, modules, by="Varname")
+
+na.count <- data.table(vars[,1], "na_waves"=rowSums(is.na(vars[,2:4])), "na_modules"=rowSums(is.na(vars[,5:7])))
+
+vars_w_na <- full_join(vars, na.count, by="Varname", keep = F)
+
+vars_keep_top_modules <- tibble(vars_w_na) %>% 
+  filter(na_waves <= 1) %>% 
+  select(Varname, `Module.I`) %>% 
+  group_by(`Module.I`) %>% 
+  nest()
+
+#Data entry error!!
+#Clergy and sex show 2008 only on the website
+#Also shows 34 variables inst of 7
+
+vars %>% 
+  filter(`Module.I`=="Clergy/Sex")
+
+vars %>% 
+  count(Module.I, Module.II, Module.III) %>% 
+  filter(Module.I=="Core")
+
+%>% 
+  mutate(Module.Total = rowSums(c(Module.I, Module.II, Module.III)))
+
+# vars_counts <- tibble(vars) %>% 
+#   count(`X2006..Panel`,`X2008..Panel`,`X2010..Panel`,`Module.I`,`Module.II`,`Module.III`) %>% 
+#   filter((`X2006..Panel`=="X"&&`X2006..Panel`=="X"&&`X2006..Panel`=="X") ||
+#          (`X2008..Panel`=="X"&&`X2010..Panel`=="X"))
+
+
+
+# tl <- tolower(modules_1$data[[1]]$Varname[1])
+# x <- ((gss_cols[,1]==tolower(modules_1$data[[1]]$Varname[1])))
+# 
+# summary(x)
+# length(modules_1$data[[1]]$Varname[])
+# str(modules_1$Module.I[1])
+# 
+# modules_1$data[[1]]$Varname[]
+# 
+# for(j in 1:length(gss_cols)) {
+#   for(i in 1:length(modules_1)) {
+#     for (k in 1:length(modules_1$data[[i]]$Varname[])) {
+#       if(gss_cols[,1]==tolower(modules_1$data[[i]]$Varname[k])) {
+#         gss_cols[j,2] <- modules_1$Module.I[i];
+#         k <- k+1;
+#       } else {
+#         gss_cols[j,2] <- "NULL"
+#         k <- k+1;
+#       }
+#     }
+#   }
+# }
+# 
+# modules_1$data[[1]]$Varname[]
+# 
+# length(colnames(gss))
+
+
+
+# for (i in 1:length(modules_1)) {
+#   for(j in 1:length(colnames(gss))) {
+#   print(modules_1$data[[i]]) 
+#   }
+# }
+
+
+```
+
+
+
